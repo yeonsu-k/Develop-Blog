@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'SUIT Variable';
+  font-weight: 100 900;
+  src: url('/static/fonts/SUIT-Variable.woff2') format('woff2-variations');
+}
+
 .task-list-item::before {
   @apply hidden;
 }

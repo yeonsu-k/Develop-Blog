@@ -1,8 +1,8 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'Yeonsu Dev Blog',
+  title: 'Code & Growth',
   author: 'Yeonsu Kim',
-  headerTitle: 'Yeonsu.dev',
+  headerTitle: 'Code & Growth',
   description: '개발과 성장을 기록하는 공간입니다',
   language: 'ko-kr',
   theme: 'system', // system, dark or light
