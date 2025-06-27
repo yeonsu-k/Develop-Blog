@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="mb-3 flex space-x-4">
           <SocialIcon kind="mail" href={`mailto:${siteMetadata.email}`} size={6} />
           <SocialIcon kind="github" href={siteMetadata.github} size={5} />
-          {/* <SocialIcon kind="linkedin" href={siteMetadata.linkedin} size={6} /> */}
+          <SocialIcon kind="linkedin" href={siteMetadata.linkedin} size={6} />
         </div>
         <div className="mb-8 flex space-x-2 text-sm text-gray-500 dark:text-gray-400">
           <Link href={siteMetadata.github}>{siteMetadata.author}</Link>
