@@ -1,0 +1,304 @@
+---
+title: 'MCP 서버 연동 개발환경 만들기(2) - 설치 및 설정 가이드'
+date: '2025-06-27'
+tags: ['AI', 'MCP', 'Claude', '워크플로우', '개발도구', '생산성', '가이드']
+draft: false
+summary: 'Claude Desktop과 MCP 서버를 연동하기 위한 실전 설치 및 설정 가이드입니다. Claude_desktop_config.json 설정부터 주요 서비스 연동까지 단계별로 진행합니다.'
+images: []
+authors: ['default']
+---
+
+1편에서 MCP의 개념과 도입 동기를 살펴봤다면, 이제 실제로 **MCP 서버를 설치하고 Claude Desktop과 연동하는 방법**을 알아봅시다.
+이 글은 macOS 기준으로 작성되었지만, 기본 원리는 대부분의 OS에 동일하게 적용됩니다.
+
+### 📑 목차
+
+<div style={{lineHeight: "1.2", marginTop: "-0.5rem", fontSize: "0.9rem"}}>
+
+- [📋 사전 준비사항](#-사전-준비사항)
+- [🏗️ MCP 서버 구조 이해하기](#️-mcp-서버-구조-이해하기)
+- [⚙️ claude_desktop_config.json 설정](#️-claude_desktop_configjson-설정)
+- [🔗 주요 MCP 서버 설정](#-주요-mcp-서버-설정)
+- [🔄 완전한 설정 예시](#-완전한-설정-예시)
+- [✅ 연결 확인 및 테스트](#-연결-확인-및-테스트)
+- [🐛 문제 해결 및 디버깅](#-문제-해결-및-디버깅)
+- [🧩 VS Code(Copilot)에서 MCP 연결](#-vs-codecopilot에서-mcp-연결)
+- [🎯 다음 단계](#-다음-단계)
+
+</div>
+
+---
+
+## 📋 사전 준비사항
+
+### 필수 요건
+
+- **Claude Desktop** (최신 버전) - [Claude Desktop 다운로드](https://claude.ai/download)
+- **Node.js** (v18 이상) 또는 **npm**
+  - [Node.js 다운로드](https://nodejs.org/ko)
+- **Git** (일부 MCP 서버 설치 시 필요)
+- **기본 터미널 명령어 이해**
+
+### 선택 사항
+
+- **Docker** (일부 서비스 연동 시)
+- **API 토큰** (GitHub, Notion 등의 인증 토큰)
+
+---
+
+## 🏗️ MCP 서버 구조 이해하기
+
+MCP 서버를 연동하기 전에, 구조를 먼저 이해하면 설정이 타당해 보입니다.
+
+```
+Claude Desktop
+    ↓
+claude_desktop_config.json (설정 파일)
+    ↓
+MCP Server (npx 또는 직접 실행)
+    ↓
+External Service (Notion, GitHub, Filesystem, ...)
+```
+
+**claude_desktop_config.json**은 Claude Desktop이 시작할 때 읽는 설정 파일입니다. 여기에 MCP 서버 정보를 등록하면, Claude Desktop이 자동으로 그 서버를 연동합니다.
+
+---
+
+## ⚙️ claude_desktop_config.json 설정
+
+### 파일 위치
+
+Claude Desktop의 설정 파일은 다음 위치에 있습니다:
+
+**macOS:**
+
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+**Windows:**
+
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+**Linux:**
+
+```
+~/.config/Claude/claude_desktop_config.json
+```
+
+### 기본 구조
+
+설정 파일의 기본 구조는 다음과 같습니다:
+
+```json
+{
+  "mcpServers": {
+    "서버이름": {
+      "command": "npx",
+      "args": ["-y", "패키지이름"]
+    },
+    "다른서버": {
+      "command": "node",
+      "args": ["/경로/to/server.js"]
+    }
+  }
+}
+```
+
+### 설정 파일 여는 방법 (Claude Desktop)
+
+1. Claude Desktop 실행
+2. 왼쪽 상단 메뉴에서 **파일 > 설정** 클릭
+3. 개발자 탭에서 **설정 편집** 클릭
+4. `claude_desktop_config.json` 파일이 텍스트 에디터로 열림
+
+---
+
+## 🔗 주요 MCP 서버 설정
+
+이 글에서는 **설치와 설정 흐름**에 집중합니다. 서비스별(MCP 서버별) 상세 가이드는 1편에서 별도의 페이지 링크로 정리해 두었으니, 필요할 때 해당 링크를 통해 확인해주세요.
+
+- 1편: [Claude와 MCP 서버 연동 개발환경 만들기(1)](/blog/claude-mcp-ai-workflow)
+- 서비스별 설정 참고: MCP 서버 공식 리포지토리
+  - https://github.com/modelcontextprotocol/servers
+
+> ⚠️ **주의**: Notion, Figma 등 개별 서비스 예시는 1편의 상세 가이드 링크로 연결하는 흐름을 유지합니다. 이 글에서는 토큰 발급, 권한 범위 등 민감한 설정을 최소한의 설명으로만 다룹니다.
+
+---
+
+## 🔄 완전한 설정 예시
+
+다음은 세 가지 주요 서버를 모두 설정한 완전한 예시입니다:
+
+```json
+{
+  "mcpServers": {
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-notion"],
+      "env": {
+        "NOTION_API_KEY": "ntn_your_api_key_here"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/username/Projects"]
+    }
+  }
+}
+```
+
+---
+
+## ✅ 연결 확인 및 테스트
+
+### 1단계: 설정 파일 검증
+
+JSON 파일의 문법이 올바른지 확인하세요. VS Code 또는 온라인 JSON 검증 도구를 사용할 수 있습니다.
+
+```bash
+# macOS에서 JSON 파일 검증
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | python3 -m json.tool
+```
+
+### 2단계: 완전한 재시작
+
+단순히 Claude Desktop을 종료하는 것으로는 부족합니다:
+
+```bash
+# macOS에서 Claude Desktop 프로세스 완전히 종료
+pkill -9 Claude
+```
+
+새로 시작해야 설정이 적용됩니다.
+
+### 3단계: Claude Desktop에서 테스트
+
+각 서버별 테스트 프롬프트:
+
+**공통 테스트 예시:**
+
+```
+설정된 MCP 서버 목록을 간단히 요약해줘
+```
+
+```
+연결된 서버 중 하나를 선택해서 간단한 읽기 작업을 수행해줘
+```
+
+### 4단계: 도구 사용 가능 확인
+
+Claude Desktop의 우측 하단을 보면, 연동된 도구들이 표시됩니다. 각 MCP 서버가 정상 작동하면 아이콘이 보일 것입니다.
+
+---
+
+## 🐛 문제 해결 및 디버깅
+
+### 문제 1: MCP 서버가 연동되지 않음
+
+**원인:**
+
+- 설정 파일의 JSON 문법 오류
+- Claude Desktop이 완전히 재시작되지 않음
+- 환경 변수(토큰)가 올바르지 않음
+
+**해결책:**
+
+```bash
+# 1. 설정 파일 문법 검증
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | python3 -m json.tool
+
+# 2. DEBUG 모드로 실행 (macOS)
+DEBUG=* /Applications/Claude.app/Contents/MacOS/Claude
+
+# 3. 토큰이 올바른지 확인
+echo $GITHUB_PERSONAL_ACCESS_TOKEN
+echo $NOTION_API_KEY
+```
+
+### 문제 2: "Tool use not available" 오류
+
+**원인:**
+
+- MCP 서버가 제대로 실행되지 않음
+- 토큰의 권한이 부족함
+
+**해결책:**
+
+1. 토큰의 권한 범위(scope) 확인
+2. 토큰이 유효한지 확인 (만료 확인)
+3. 환경 변수가 정확히 입력되었는지 재확인
+
+---
+
+## 🧩 VS Code(Copilot)에서 MCP 연결
+
+VS Code의 AI 에이전트 기능에서도 MCP 서버를 연결할 수 있습니다. 프로젝트 루트에 `.vscode/mcp.json` 파일을 생성하고 VS Code 설정에서 AI 에이전트 기능을 활성화하세요.
+
+### 빠른 체크리스트
+
+- `.vscode/mcp.json` 생성
+- VS Code 재시작
+- 명령 팔레트에서 `MCP: add Server` 또는 `MCP: list Servers` 사용
+
+> 참고: Copilot에서는 MCP 연결 도구 수가 **최대 128개**로 제한됩니다. (기준 날짜 : 2025-06-26)
+
+---
+
+## 🎯 다음 단계
+
+이제 기본적인 MCP 연동이 완료되었습니다. 다음 단계들을 고려해보세요:
+
+### 추가 MCP 서버 연동
+
+**1편에서 소개한 8개 핵심 서비스:**
+
+- **Notion**: 문서 작성, 데이터베이스 관리
+- **Context7**: 최신 개발 문서와 라이브러리 정보 검색
+- **GitHub**: 저장소 관리, 이슈/PR 처리
+- **Figma**: 디자인 파일 조회 및 컴포넌트 관리
+- **Filesystem**: 로컬 파일 시스템 직접 접근
+- **Sequential-thinking**: 복잡한 문제 단계별 분석
+- **Knowledge Graph Memory**: 프로젝트 정보 지속적 저장
+- **Mem0**: 컨텍스트 메모리 시스템
+- **Playwright**: 브라우저 자동화 및 E2E 테스트
+
+---
+
+## 💡 팁과 주의사항
+
+### 보안 권장사항
+
+1. **토큰 절대 공개하지 않기**: 설정 파일을 Git에 커밋할 때 주의하세요
+2. **최소 권한 원칙**: API 토큰에는 필요한 최소 권한만 부여하세요
+3. **정기적 토큰 갱신**: 장기간 사용하지 않은 토큰은 삭제하세요
+
+### 성능 최적화
+
+1. **불필요한 서버 비활성화**: 사용하지 않는 MCP 서버는 설정에서 제거하세요
+2. **메모리 모니터링**: 많은 MCP 서버를 동시에 실행하면 메모리 사용량이 증가합니다
+3. **경로 제한**: Filesystem의 접근 경로를 최소화하세요
+
+---
+
+## 📚 참고 자료
+
+- [MCP 공식 문서](https://modelcontextprotocol.io/)
+- [Claude 공식 가이드](https://support.anthropic.com/)
+- [MCP 서버 목록](https://github.com/modelcontextprotocol/servers)
+- [npx로 MCP 서버 실행하기](https://docs.anthropic.com/en/docs/build-a-system-prompt-or-a-tool)
+
+---
+
+이제 Claude Desktop과 다양한 외부 서비스가 하나로 통합되었습니다. 이를 통해 더욱 강력하고 효율적인 AI 중심의 개발 워크플로우를 구축할 수 있습니다.
+
+다음 글에서는 **실제 활용 사례와 고급 패턴**들을 다룰 예정입니다!
