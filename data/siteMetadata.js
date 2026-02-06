@@ -8,18 +8,22 @@ const siteMetadata = {
   theme: 'system', // system, dark or light
   siteUrl: 'https://develop-blog-ten.vercel.app',
   siteRepo: 'https://github.com/yeonsu-k/Develop-Blog',
-  siteLogo: '/static/images/logo.png',
-  socialBanner: '/static/images/twitter-card.png',
+  siteLogo: `${process.env.BASE_PATH || ''}/static/images/avatar.png`,
+  socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.png`,
   mastodon: '',
   email: 'dustnzlzl@naver.com',
   github: 'https://github.com/yeonsu-k',
-  twitter: '',
+  x: '',
   facebook: '',
   youtube: '',
   linkedin: 'https://www.linkedin.com/in/yeonsu-kim-059670300',
   threads: '',
   instagram: '',
+  medium: '',
+  bluesky: '',
   locale: 'ko-KR',
+  // set to true if you want a navbar fixed to the top
+  stickyNav: false,
   analytics: {
     // If you want to use an analytics provider you have to add it to the
     // content security policy in the `next.config.js` file.
@@ -31,16 +35,6 @@ const siteMetadata = {
       // src: 'https://us.umami.is/script.js'
       // Remember to add 'us.umami.is' in `next.config.js` as a permitted domain for the CSP
     },
-    // plausibleAnalytics: {
-    //   plausibleDataDomain: '', // e.g. tailwind-nextjs-starter-blog.vercel.app
-    // },
-    // simpleAnalytics: {},
-    // posthogAnalytics: {
-    //   posthogProjectApiKey: '', // e.g. 123e4567-e89b-12d3-a456-426614174000
-    // },
-    // googleAnalytics: {
-    //   googleAnalyticsId: '', // e.g. G-XXXXXXX
-    // },
   },
   comments: {
     // If you want to use an analytics provider you have to add it to the
@@ -69,22 +63,14 @@ const siteMetadata = {
       // example: https://giscus.app/themes/custom_example.css
       themeURL: '',
       // This corresponds to the `data-lang="en"` in giscus's configurations
-      lang: 'en',
+      lang: 'ko',
     },
   },
   search: {
     provider: 'kbar', // kbar or algolia
     kbarConfig: {
-      searchDocumentsPath: 'search.json', // path to load documents to search
+      searchDocumentsPath: `${process.env.BASE_PATH || ''}/search.json`, // path to load documents to search
     },
-    // provider: 'algolia',
-    // algoliaConfig: {
-    //   // The application ID provided by Algolia
-    //   appId: 'R2IYF7ETH7',
-    //   // Public API key: it is safe to commit it
-    //   apiKey: '599cec31baffa4868cae4e79f180729b',
-    //   indexName: 'docsearch',
-    // },
   },
 }
 
