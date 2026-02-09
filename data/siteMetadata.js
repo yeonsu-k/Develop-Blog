@@ -3,7 +3,7 @@ const siteMetadata = {
   title: 'Code & Growth',
   author: 'Yeonsu Kim',
   headerTitle: 'Code & Growth',
-  description: '개발과 성장을 기록하는 공간입니다',
+  description: '배우고 만들고 기록합니다.',
   language: 'ko-kr',
   theme: 'system', // system, dark or light
   siteUrl: 'https://develop-blog-ten.vercel.app',
