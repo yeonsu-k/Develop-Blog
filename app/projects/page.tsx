@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import projectsData from '@/data/projectsData'
 import Card from '@/components/Card'
 import { genPageMetadata } from 'app/seo'
@@ -5,6 +6,8 @@ import { genPageMetadata } from 'app/seo'
 export const metadata = genPageMetadata({ title: 'Projects' })
 
 export default function Projects() {
+  // TODO: Projects 페이지 준비되면 아래 notFound() 제거
+  notFound()
   return (
     <>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">

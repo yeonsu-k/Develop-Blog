@@ -12,6 +12,7 @@ const compat = new FlatCompat({
   baseDirectory: __dirname,
 })
 
+/* eslint import/no-anonymous-default-export: [2, {"allowArray": true}] */
 export default [
   {
     ignores: [],
@@ -60,7 +61,10 @@ export default [
         },
       ],
       'react/prop-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'react/no-unescaped-entities': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-var-requires': 'off',
