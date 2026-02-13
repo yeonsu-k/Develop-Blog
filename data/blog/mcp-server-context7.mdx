@@ -1,0 +1,151 @@
+---
+title: 'MCP 서버 연결 가이드 - Context7, 최신 라이브러리 문서 읽기'
+date: '2025-06-04'
+tags: ['AI', 'MCP', 'Claude', 'Context7', '개발도구', '생산성']
+draft: false
+summary: 'Context7 MCP 서버를 연결하여 Claude가 최신 라이브러리 문서와 코드 예제를 실시간으로 참조할 수 있도록 설정하는 방법을 소개합니다.'
+images: []
+authors: ['default']
+---
+
+AI 코딩 어시스턴트를 사용하다 보면, 학습 데이터의 시점 한계로 인해 **최신 라이브러리 버전의 문법이나 API를 정확하게 안내받지 못하는 경우**가 있습니다.
+
+<b>Context7</b>은 이 문제를 해결하기 위해, AI 프롬프트에 **최신 공식 문서와 코드 예제를 실시간으로
+주입**해주는 MCP 서버입니다.
+
+---
+
+## 🔗 Context7이란?
+
+Context7은 AI가 라이브러리의 **최신 문서와 버전별 코드 예제**를 실시간으로 참조할 수 있도록 해주는 서비스입니다.
+
+기존 AI 코딩 어시스턴트의 한계를 보완합니다:
+
+- **기존 문제**: AI가 학습 시점 이전의 문서만 참조 → 최신 API 변경사항 반영 불가
+- **Context7 해결**: 프롬프트에 `use context7` 키워드를 추가하면, 해당 라이브러리의 최신 공식 문서를 자동으로 가져와 컨텍스트에 포함
+
+---
+
+## 💡 왜 MCP로 연결했나?
+
+### 주요 장점
+
+- **실시간 최신 문서 접근**: 라이브러리 업데이트 시 즉시 최신 정보 반영
+- **버전별 정확한 코드 예제**: 사용 중인 버전에 맞는 정확한 예제 제공
+- **생산성 향상**: 공식 문서를 직접 찾아보는 시간 절약
+- **크로스 클라이언트 호환**: Claude Desktop, Cursor, VS Code 등 다양한 환경에서 사용 가능
+
+---
+
+## ⚙️ 설치 및 설정
+
+### 사전 준비사항
+
+- Node.js 설치 (npx 사용을 위함)
+- Claude Desktop App 또는 MCP를 지원하는 에디터
+
+### Claude Desktop Config 설정
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}
+```
+
+> 💡 **별도의 API 키나 인증 없이** 바로 사용할 수 있습니다.
+
+### VS Code에서 설정
+
+VS Code의 MCP 설정 파일(`.vscode/mcp.json`)에 다음을 추가합니다:
+
+```json
+{
+  "servers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}
+```
+
+---
+
+## 🔧 주요 기능
+
+### 제공 도구(Tools)
+
+| 도구명               | 설명                                        |
+| -------------------- | ------------------------------------------- |
+| `resolve-library-id` | 라이브러리 이름으로 Context7 호환 ID를 조회 |
+| `get-library-docs`   | 라이브러리의 문서와 코드 예제를 가져오기    |
+
+### `resolve-library-id`
+
+라이브러리 이름을 입력하면 Context7에서 사용 가능한 라이브러리 목록과 ID를 반환합니다.
+
+### `get-library-docs`
+
+조회된 라이브러리 ID를 기반으로 문서와 코드 예제를 가져옵니다. 주요 파라미터:
+
+- **topic** (선택): 특정 주제에 대한 문서만 필터링
+- **tokens** (선택, 기본값 10000): 반환할 최대 토큰 수 조절
+
+---
+
+## ✨ 실제 활용 사례
+
+### 사용 방법
+
+프롬프트에 **`use context7`** 키워드를 추가하면 자동으로 최신 문서를 참조합니다.
+
+```
+TailwindCSS v4로 반응형 레이아웃 만들어줘. use context7
+```
+
+### TailwindCSS v4 마이그레이션 경험
+
+TailwindCSS가 v3에서 v4로 업그레이드되면서 설정 방식이 크게 변경되었습니다. 기존 AI는 v3 기준의 `tailwind.config.js` 방식을 안내했지만, Context7을 사용하면 **v4의 CSS 기반 설정 방식**을 정확하게 안내받을 수 있었습니다.
+
+<div className="flex flex-col items-center gap-3 md:gap-5">
+  <img
+    src="/static/images/blog/mcp-series/context7/context7-01.png"
+    alt="Context7로 TailwindCSS v4 최신 문서 참조"
+    className="!mt-4 !mb-0 w-full sm:w-11/12 md:w-[80%] rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/context7/context7-02.png"
+    alt="Context7 사용 예시"
+    className="!mt-0 w-full sm:w-11/12 md:w-[80%] rounded-lg shadow-sm"
+  />
+</div>
+
+### 활용 팁
+
+- **새 프로젝트 시작 시** 특히 유용합니다. 최신 버전의 정확한 설정 방법을 바로 확인할 수 있습니다.
+- **기존 코드 리팩토링**에는 상대적으로 효과가 적습니다. 이미 작성된 코드의 맥락을 이해하는 것은 AI 자체의 능력에 의존합니다.
+- 라이브러리 업데이트 후 **Breaking Changes 대응**에 효과적입니다.
+
+---
+
+## 🐛 문제 해결 / 주의사항
+
+- Context7이 모든 라이브러리를 지원하지는 않습니다. `resolve-library-id`로 먼저 지원 여부를 확인하세요.
+- 토큰 수가 너무 크면 컨텍스트 창을 많이 차지할 수 있으므로, 필요에 따라 `tokens` 파라미터를 조절하세요.
+- 네트워크 연결이 필요합니다. 오프라인 환경에서는 사용할 수 없습니다.
+
+---
+
+## 📚 참고 자료
+
+- [Context7 MCP 서버 GitHub](https://github.com/upstash/context7)
+- [Context7 MCP 서버 설치 및 사용 방법](https://apidog.com/kr/blog/context7-mcp-server-kr/)
