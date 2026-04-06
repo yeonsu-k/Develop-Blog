@@ -1,0 +1,135 @@
+---
+title: 'MCP 서버 연결 가이드 - Filesystem, 로컬 파일에 자유롭게 접근하기'
+date: '2025-06-10'
+tags: ['AI', 'MCP', 'Claude', 'Filesystem', '개발도구', '생산성']
+draft: false
+summary: 'Claude Desktop에서 로컬 파일 시스템에 접근하여 프로젝트 파일을 읽고 수정할 수 있는 Filesystem MCP 서버 연결 방법을 소개합니다.'
+images: []
+authors: ['default']
+---
+
+<b>Filesystem MCP</b>는 Claude Desktop에서 로컬 파일 시스템에 접근할 수 있게 해주는 공식 MCP입니다.
+
+VSCode Copilot처럼 프로젝트 파일을 읽고 수정할 수 있게 되어, 파일을 직접 첨부하지 않고도 AI와 협업할 수 있습니다.
+
+---
+
+## ⚙️ 설치 및 설정
+
+### 사전 준비사항
+
+- Claude Desktop App 설치
+- Node.js 설치 (npx 사용을 위함)
+
+### Claude Desktop Config 설정
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/your-username/work-projects",
+        "/Users/your-username/Documents/dev"
+      ]
+    }
+  }
+}
+```
+
+### 경로 설정 예시
+
+- **회사 프로젝트**: `/Users/username/work/frontend-projects`
+- **개인 학습**: `/Users/username/Documents/coding`
+
+> 💡 **중요**: args 배열에 나열한 경로만 Claude가 접근할 수 있습니다. 보안을 위해 필요한 디렉토리만 지정하세요.
+
+---
+
+## 🛠️ 주요 기능
+
+Filesystem MCP는 다양한 파일 시스템 작업을 지원합니다.
+
+### ✅ 지원 기능
+
+- **📁 파일 읽기**: 프로젝트 파일 내용 분석 및 이해
+- **✏️ 파일 쓰기**: 코드 수정, 새 파일 생성
+- **🗺️ 디렉토리 탐색**: 프로젝트 구조 파악 및 파일 찾기
+- **🔍 파일 검색**: 특정 코드나 패턴 찾기
+- **🗑️ 파일 삭제**: 불필요한 파일 정리
+
+---
+
+## 💡 VSCode Copilot과의 차이점
+
+| 기능              | VSCode Copilot         | Claude Desktop + Filesystem MCP |
+| ----------------- | ---------------------- | ------------------------------- |
+| **접근 범위**     | 현재 워크스페이스만    | 지정한 모든 폴더들              |
+| **파일 탐색**     | 제한적                 | 완전한 디렉토리 탐색            |
+| **컨텍스트**      | 현재 파일 중심         | 전체 프로젝트 이해              |
+| **파일 조작**     | IDE 내에서만           | 직접 파일 수정/생성             |
+| **프로젝트 전환** | 워크스페이스 변경 필요 | 여러 프로젝트 동시 접근         |
+
+---
+
+## 🏆 주요 장점
+
+### 1. 다른 AI 도구와의 호환성
+
+- ** 워크플로우 연속성**: IDE에서 작업하다가 Claude Desktop이나 Cursor로 자연스럽게 전환 가능
+- ** 생산성 향상**: 다양한 AI 도구를 필요에 따라 선택 사용
+
+---
+
+## 💻 실제 활용 사례
+
+### 1. 컴포넌트 생성
+
+_"회사 디자인 시스템에 맞는 Header 컴포넌트를 만들어주세요"_
+
+1. 기존 컴포넌트 스타일 분석
+2. 디자인 시스템 패턴 파악
+3. Header.jsx 생성
+4. 스타일 파일 생성
+5. index.js에 export 추가
+
+### 2. 버그 수정
+
+_"API 호출에서 에러가 나는데 확인해주세요"_
+
+1. 전체 프로젝트에서 API 호출 코드 검색
+2. 에러 발생 가능한 부분 식별
+3. 수정된 코드로 파일 업데이트
+4. 에러 핸들링 로직 추가
+
+### 3. 리팩토링
+
+_"이 컴포넌트를 TypeScript로 변환해주세요"_
+
+1. 현재 컴포넌트 구조 분석
+2. Props 타입 정의
+3. TypeScript 파일로 변환
+4. 관련 import 문 업데이트
+
+---
+
+## ✨ 사용 후기
+
+경로를 설정한 폴더 내의 모든 파일에 자유롭게 접근할 수 있어 매우 편리했습니다.
+
+특히 **VSCode Copilot을 사용하지 않고 Claude Desktop 같은 별도 AI를 사용하는 경우**, 파일을 일일이 첨부하지 않고도 작업할 수 있어 워크플로우가 훨씬 수월해졌습니다.
+
+전체 프로젝트 구조를 이해하고 여러 파일을 동시에 수정할 때 특히 유용했습니다.
+
+---
+
+## 📚 참고 자료
+
+- [Filesystem MCP 공식 저장소](https://github.com/cyanheads/filesystem-mcp-server?tab=readme-ov-file)
+- [MCP 공식 문서](https://modelcontextprotocol.io/)

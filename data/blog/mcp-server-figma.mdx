@@ -1,0 +1,186 @@
+---
+title: 'MCP 서버 연결 가이드 - Figma, 디자인 빠르게 작업하기'
+date: '2025-06-09'
+tags: ['AI', 'MCP', 'Claude', 'Figma', '디자인', '생산성']
+draft: false
+summary: 'Claude와 Figma를 MCP로 연결하여 디자인 파일 조회, 컴포넌트 분석, 이미지 다운로드를 자동화하는 방법을 소개합니다.'
+images: []
+authors: ['default']
+---
+
+프론트엔드 개발에서 디자인 파일을 참조하며 코드를 작성하는 것은 일상적인 작업입니다. <b>Figma MCP 서버</b>를 연결하면 Claude가 **Figma 디자인 파일을 직접 조회하고 분석**하여 개발 작업을 도와줄 수 있습니다.
+
+---
+
+## 🔗 Figma MCP란?
+
+Figma MCP 서버는 Claude가 Figma API를 통해 **디자인 파일에 직접 접근**할 수 있도록 해주는 서버입니다. 디자인 파일의 구조, 컴포넌트, 스타일 정보를 읽어와서 코드 생성에 활용할 수 있습니다.
+
+---
+
+## 💡 왜 MCP로 연결했나?
+
+- **디자인-개발 간극 해소**: Figma 디자인을 직접 참조하여 정확한 UI 구현
+- **컴포넌트 분석**: 디자인 시스템의 컴포넌트 구조를 자동으로 파악
+- **이미지 에셋 관리**: 필요한 이미지를 직접 다운로드하여 프로젝트에 적용
+- **레이아웃 이해**: 디자인의 레이아웃 구조를 분석하여 CSS/HTML 코드 생성
+
+---
+
+## ⚙️ 설치 및 설정
+
+### 사전 준비사항
+
+1. **Figma 계정** 및 접근 권한이 있는 디자인 파일
+2. **Figma API Key 발급**:
+   - Figma 설정 → Account → Personal access tokens에서 생성
+   - 생성된 토큰을 안전하게 보관
+
+<img
+  src="/static/images/blog/mcp-series/figma/figma-01.png"
+  alt="Figma Personal Access Token 생성"
+  className="!mt-4 !mb-0 w-full rounded-lg shadow-sm sm:w-11/12 md:w-[80%] lg:max-w-[480px]"
+/>
+
+### Claude Desktop Config 설정
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp", "--stdio"],
+      "env": {
+        "FIGMA_API_KEY": "figd_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+### 환경 변수 설정
+
+**macOS/Linux:**
+
+```bash
+# ~/.zshrc 또는 ~/.bashrc에 추가
+export FIGMA_API_KEY="figd_your_api_key_here"
+```
+
+---
+
+## 🔧 주요 기능
+
+| 도구명                  | 설명                                   |
+| ----------------------- | -------------------------------------- |
+| `get_figma_data`        | Figma 파일의 구조와 디자인 데이터 조회 |
+| `download_figma_images` | 디자인에서 이미지 에셋 다운로드        |
+
+### `get_figma_data`
+
+Figma 파일 URL 또는 노드 ID를 기반으로 디자인 데이터를 가져옵니다:
+
+- 페이지 구조 및 레이어 정보
+- 컴포넌트 속성 및 스타일
+- 레이아웃 정보 (Auto Layout, 정렬, 간격 등)
+- 색상, 폰트, 크기 등 스타일 데이터
+
+### `download_figma_images`
+
+디자인 파일에서 특정 노드의 이미지를 PNG, SVG 등 원하는 포맷으로 다운로드합니다.
+
+---
+
+## ✨ 실제 활용 사례
+
+### 1. 디자인 기반 코드 생성
+
+Figma 파일 URL을 전달하면 Claude가 디자인 구조를 분석하여 해당 레이아웃의 HTML/CSS 또는 React 컴포넌트 코드를 생성해줍니다.
+
+```
+이 Figma 디자인을 보고 React 컴포넌트로 만들어줘:
+https://www.figma.com/file/xxxxx/...
+```
+
+### 프롬프트 및 응답 결과
+
+<div className="grid grid-cols-2 gap-3 md:gap-5">
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-02.png"
+    alt="프롬프트 및 응답 결과 1"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-03.png"
+    alt="프롬프트 및 응답 결과 2"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-04.png"
+    alt="프롬프트 및 응답 결과 3"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-05.png"
+    alt="프롬프트 및 응답 결과 4"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+</div>
+
+첫 번째 시도에서는 레이아웃 구조를 좌우 두 영역으로 잘못 이해했지만, **실제 결과물과 원본 디자인이 다르다는 피드백**을 주자 Figma 데이터를 다시 자세히 분석하여 두 번째 시도에서 정확한 레이아웃으로 수정되었습니다. 완벽한 결과를 한 번에 기대하기보다 단계적으로 피드백을 주는 방식이 효과적입니다.
+
+### 활용 팁
+
+- **권한 설정이 중요합니다.** Figma 파일에 대한 읽기 권한이 있어야 API로 접근할 수 있습니다.
+- 복잡한 레이아웃의 경우 **한 번에 완벽한 결과를 기대하기보다**, 단계적으로 수정해 나가는 것이 효과적입니다.
+- **VS Code와 함께 사용**하면 디자인을 참조하면서 바로 코드를 수정할 수 있어 편리합니다.
+- Cursor를 사용하는 경우 **Figma 전용 플러그인**이 별도로 있으므로, 환경에 맞게 선택하여 사용하면 좋습니다.
+
+### 2. 새로운 UI 만들기 : todo 메인 만들기
+
+Claude에게 Figma에서 작업할 수 있는 Todo 앱 메인 화면 UI를 요청해보았습니다. 프롬프트 및 응답 결과와 피그마에 붙여넣은 SVG 결과물입니다.
+
+<div className="grid grid-cols-2 gap-3 md:gap-5">
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-06.png"
+    alt="todo UI 생성 프롬프트 및 응답 1"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-07.png"
+    alt="todo UI 생성 프롬프트 및 응답 2"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-08.png"
+    alt="todo UI SVG 출력 결과물 - 피그마에 붙여넣기 전"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+  <img
+    src="/static/images/blog/mcp-series/figma/figma-09.png"
+    alt="피그마에 붙여넣은 결과"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm"
+  />
+</div>
+
+결과물을 피그마에 붙여넣으려면 **SVG 형식으로 출력**해달라고 명확히 요청해야 합니다. 단순히 "만들어줘"라고 하면 HTML로 출력할 때가 있어서, **"피그마에 작업할 수 있도록 SVG로 출력해줘"** 라고 명시하는 것이 중요합니다. 다만 애니메이션이나 인터랙션이 필요한 경우에는 한계가 있습니다.
+
+---
+
+## 🐛 문제 해결 / 주의사항
+
+- **API Key 권한**: Personal Access Token에 파일 읽기 권한이 포함되어 있는지 확인하세요.
+- **파일 접근 권한**: Figma 파일이 "Anyone with the link" 또는 팀 멤버로 공유되어 있어야 합니다.
+- **대용량 파일**: 복잡한 디자인 파일은 데이터 조회에 시간이 걸릴 수 있습니다. 특정 노드 ID를 지정하여 필요한 부분만 조회하는 것을 권장합니다.
+
+---
+
+## 📚 참고 자료
+
+- [Figma MCP 서버 상세 가이드](https://apidog.com/kr/blog/figma-mcp-kr/)
+- [Figma MCP 연결 및 사용법](https://shu-shu-bear.tistory.com/92)
+- [피그마로 UI 그리기](https://5ffthewall.tistory.com/137)
