@@ -1,0 +1,120 @@
+---
+title: 'FEConf 2024 후기'
+date: '2024-08-24'
+tags: ['컨퍼런스', 'FEConf', 'E2E', 'Playwright', '프론트엔드']
+draft: false
+summary: 'FEConf 2024에서 들은 두 세션 — E2E 테스트 실전 경험기와 플랫폼 서버로 프론트엔드 확장하기 — 를 정리했습니다.'
+images: []
+authors: ['default']
+---
+
+FEConf 2024에 참석해 두 세션을 들었다. 세종대학교 광개토홀에서 열렸다.
+
+E2E 테스트를 실제 서비스에 도입하면서 겪은 문제와 해결 방법을 공유한 세션, 그리고 플랫폼 서버 구조로 프론트엔드 개발 경험을 개선한 사례를 담은 세션이었다.
+
+<div className="flex flex-col items-center justify-center gap-3 md:flex-row md:gap-5">
+  <img
+    src="/static/images/blog/conference/feconf-2024-03.jpeg"
+    alt="FEConf 2024 컨퍼런스장"
+    className="!mt-0 !mb-0 w-full rounded-lg object-cover shadow-sm sm:w-11/12 md:w-[50%]"
+  />
+  <img
+    src="/static/images/blog/conference/feconf-2024-04.jpeg"
+    alt="FEConf 2024 현장"
+    className="!mt-0 !mb-0 aspect-square w-full rounded-lg object-cover shadow-sm sm:w-11/12 md:w-[50%]"
+  />
+</div>
+
+---
+
+## 🎤 세션 1. E2E 테스트
+
+> Stibee | 부석 CTO
+
+Stibee에서 E2E 테스트를 도입한 과정을 공유한 세션이다.
+
+<div className="flex flex-col items-center justify-center gap-3 md:flex-row md:gap-5">
+  <img
+    src="/static/images/blog/conference/feconf-2024-01.jpeg"
+    alt="피리한 E2E 테스트를 꿈꾸며... 세션 슬라이드"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm sm:w-3/4"
+  />
+</div>
+
+### Selenium → Playwright 전환
+
+초기에는 **Selenium**으로 화면을 녹화하고 캡처하는 방식을 사용했다. 이후 Playwright로 전환했는데, 전환 이유가 납득이 갔다.
+
+**Playwright**의 장점:
+
+- 다양한 브라우저 지원 (Chromium, Firefox, WebKit)
+- 테스트 병렬 실행 기본 지원
+- 자동 코드 생성 (Codegen)
+- 스크린샷 자동 기본 지원
+- 브라우저 구동 속도가 빠름
+
+### 소셜 로그인 테스트
+
+소셜 로그인처럼 외부 서비스가 개입하는 경우가 E2E 테스트의 난관이었다. Stibee가 택한 방법은 <b>테스트용 이메일 서비스를 직접 간단하게 구축</b>해서 그 위에서 테스트를 돌리는 것이었다.
+
+reCAPTCHA는 라이브러리만으로는 대응이 부족하고 우회하기도 어려워서, 타임아웃 관리를 별도로 추가했다고 한다. 결국 <b>인증 전용 API를 별도로 만들어 E2E 테스트 흐름에서 인증 단계를 분리</b>하는 방향으로 해결했다.
+
+### 로그인 모듈화
+
+로그인 테스트를 한 번 만들어두면 이후 모든 페이지 테스트에서 재사용해야 한다. 이를 위해 <b>AST(Abstract Syntax Tree)를 활용해 코드를 강제 변환</b>하는 방식을 택했다. 녹화 시작 전에 로그인 플로우가 자동으로 실행되고, 이후 실제 테스트 코드가 이어지는 구조다.
+
+> **AST** : 소스 코드를 트리 구조로 파싱한 표현이다. 코드를 문자열이 아닌 구조로 다룰 수 있어서, 특정 패턴을 찾아 자동으로 변환하거나 코드를 삽입하는 데 활용된다. Babel, ESLint 같은 도구들이 내부적으로 AST를 사용한다.
+
+### 테스트 독립성 확보
+
+테스트 간 데이터 간섭을 막기 위해 **faker.js**로 난수 데이터를 생성해 각 테스트에서 독립적인 데이터를 사용하도록 했다.
+
+> **faker.js** : 이름, 이메일, 전화번호, 주소 등 가짜 데이터를 자동 생성해주는 라이브러리다. 테스트마다 다른 데이터를 쓸 수 있어서 테스트 간 상태 충돌을 방지할 수 있다.
+
+### 다국어 지원 자동화
+
+다국어 처리는 **구글 드라이브 + 엑셀** 조합으로 관리한다. 언어 파일을 엑셀로 관리하다가 변경이 생기면 프로젝트에 자동으로 반영되는 구조다.
+
+특히, <b>피그마 플러그인을 자체 개발해서 디자인에서 텍스트가 변경되면 구글 시트가 자동으로 업데이트</b>되게 만들었다고 한다. 디자인 변경이 번역 관리로 바로 이어지는 파이프라인을 직접 구축했다는 점이 인상적이었다.
+
+---
+
+## 🎤 세션 2. 7가지 플랫폼 서버로 프론트엔드 버프 걸기
+
+로딩 상태에서 **스켈레톤 UI**를 활용하는 전략을 비롯해, 플랫폼 서버 구조가 프론트엔드 개발 경험에 어떤 영향을 주는지를 다룬 세션이었다.
+
+**Framer**가 언급됐는데, 디자인 시스템 기반 웹 디자인을 제작하기 편한 프레임워크로 미리보기도 지원한다는 점이 눈에 띄었다. 웹모듈 구조로 프론트엔드와 플랫폼 서버를 연결하는 방식도 소개됐다.
+
+세션 마지막에 7가지 기술 스택 조합을 정리한 치트시트를 공유했다.
+
+- **이미지 최적화**: sharp
+- **비디오 썸네일**: execa + ffmpeg
+- **번들러**: core-js + esbuild
+- **스켈레톤**: Native + JSON + AWS S3
+- **애셋**: Native + Custom User-Agent + puppeteer
+- **오픈 그래프**: puppeteer
+- **웹모듈**: AWS S3 + esbuild
+
+<div className="flex flex-col items-center justify-center gap-3 md:flex-row md:gap-5">
+  <img
+    src="/static/images/blog/conference/feconf-2024-02.jpeg"
+    alt="7가지 플랫폼 서버 Cheat Sheet 슬라이드"
+    className="!mt-0 !mb-0 w-full rounded-lg shadow-sm sm:w-3/4"
+  />
+</div>
+
+---
+
+## 💡 인상 깊었던 것
+
+두 세션 모두 "이 문제를 어떻게 풀었는가"에 집중한 실전 중심의 발표였다. 특히 E2E 세션은 소셜 로그인, reCAPTCHA, 다국어 같은 까다로운 주제를 Playwright 도입 전후 흐름으로 자연스럽게 풀어냈다.
+
+마침 회사 프로젝트에서 Playwright와 구글 스프레드시트 기반 다국어 자동화를 직접 구축해본 경험이 있었다. 발표에서 언급된 번역 담당자와 일일이 소통해야 하는 번거로움이 낯설지 않았고, 내가 직접 부딪혔던 부분과 겹치면서 더 와닿았다.
+
+> ✍️ 직접 구현한 다국어 자동화: [Nuxt 3에서 @nuxtjs/i18n + 구글 시트로 다국어 자동화하기](/blog/nuxt-i18n-google-sheets)
+
+---
+
+## 📚 참고 자료
+
+- [FEConf 공식 사이트](https://2024.feconf.kr/)
