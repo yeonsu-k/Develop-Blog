@@ -1,0 +1,278 @@
+---
+title: 'Nuxt 3에서 @nuxtjs/i18n + 구글 시트로 다국어 자동화하기'
+date: '2024-05-28'
+tags: ['Nuxt', 'i18n', '다국어', '자동화', '구글시트', '삽질기록']
+draft: false
+summary: 'Nuxt 3 프로젝트에 @nuxtjs/i18n을 도입하고, 구글 스프레드시트로 번역 파일을 자동화한 경험을 정리했습니다. 삽질 에피소드 포함.'
+images: []
+authors: ['default']
+---
+
+회사 프로젝트에 다국어 지원을 추가하면서 `@nuxtjs/i18n`을 처음 도입했다.
+
+처음엔 JSON 파일로 번역을 직접 관리했는데, 콘텐츠가 늘어날수록 수동 업데이트가 너무 번거로워졌다. 결국 구글 스프레드시트에서 JSON을 자동 생성하는 스크립트를 구축했고, 그 과정에서 꽤 많은 삽질을 했다.
+
+---
+
+## ⚙️ 설치 및 기본 세팅
+
+### 패키지 설치
+
+```bash
+npx nuxi@latest module add i18n
+```
+
+### nuxt.config.ts 설정
+
+```ts
+export default defineNuxtConfig({
+  modules: ['@nuxtjs/i18n'],
+  i18n: {
+    locales: [
+      { code: 'ko', file: 'ko.json' },
+      { code: 'en', file: 'en.json' },
+    ],
+    defaultLocale: 'ko',
+    langDir: 'locales/',
+  },
+})
+```
+
+`locales/ko.json`, `locales/en.json` 파일에 key-value 형식으로 번역 문자열을 관리한다.
+
+```json
+{
+  "home": "홈",
+  "about": "소개",
+  "contact": "문의하기"
+}
+```
+
+템플릿에서는 `$t()` 함수로 사용한다.
+
+```html
+<p>{{ $t('home') }}</p>
+```
+
+---
+
+## 🤔 i18n만 쓸 때의 한계
+
+처음엔 JSON 파일을 직접 편집했다. 번역이 필요한 텍스트가 생길 때마다 각 언어 파일에 직접 추가하는 방식이었다.
+
+문제는 <b>글이 늘어날수록 JSON 파일 관리가 번거로워진다는 것</b>이다.
+
+- 텍스트가 추가되거나 수정될 때마다 언어별 파일을 모두 열어서 수동으로 업데이트해야 한다.
+- 키 이름을 통일하는 것도 관리가 필요하고, 번역 누락이 발생하기 쉽다.
+- 비개발자와 협업할 때 JSON 파일을 직접 편집하게 하기도 어렵다.
+
+자동화를 고민하게 된 이유가 여기 있었다.
+
+---
+
+## 🔄 구글 시트로 자동화하기
+
+구글 스프레드시트를 번역 관리 소스로 두고 두 가지 방식을 함께 운영했다.
+
+### 구글 시트 구조
+
+시트는 아래와 같이 언어별 컬럼과 `key` 컬럼으로 구성한다. `key`는 dot notation을 사용해 중첩 구조를 표현한다.
+
+| ko                                        | en                         | ja                         | key                |
+| ----------------------------------------- | -------------------------- | -------------------------- | ------------------ |
+| 홈                                        | Home                       | ホーム                     | nav.home           |
+| 소개                                      | About                      | について                   | nav.about          |
+| 문의하기                                  | Inquiry                    | お問い合わせ               | nav.inquire        |
+| _(섹션 구분 행 — key 없음, 파싱 시 스킵)_ |                            |                            |                    |
+| 이메일                                    | Email                      | メール                     | login.email        |
+| 비밀번호                                  | Password                   | パスワード                 | login.password     |
+| 로그인                                    | Sign in                    | サインイン                 | login.button       |
+| 로그인 후 이용해 주세요.                  | Please log in to continue. | ログイン後ご利用ください。 | login.comment.next |
+
+`key` 컬럼이 없거나 특수 값(`.`)인 행은 섹션 구분용으로 파싱 시 자동으로 스킵된다. `key`의 dot notation은 lodash의 `_.set`으로 중첩 JSON 구조로 변환된다.
+
+```json
+{
+  "nav": {
+    "home": "홈",
+    "about": "소개",
+    "inquire": "문의하기"
+  },
+  "login": {
+    "email": "이메일",
+    "button": "로그인",
+    "comment": {
+      "next": "로그인 후 이용해 주세요."
+    }
+  }
+}
+```
+
+### 방식 1. 스크립트로 JSON 파일 생성
+
+터미널에서 스크립트를 실행하면 구글 시트를 읽어서 `i18n/ko.json`, `i18n/en.json`을 생성하고 기존 파일을 덮어쓴다.
+
+```bash
+  # package.json
+
+  "scripts": {
+    "google-sheets": "node scripts/google-sheets.js"
+  }
+```
+
+번역 담당자가 시트를 수정하면, 개발자가 위 명령어를 실행해 파일을 업데이트하고 커밋하는 방식이다.
+
+### 방식 2. 런타임에서 구글 시트 직접 연동
+
+locale 로더 파일에서 앱 로드 시 구글 시트를 직접 읽어서 번역 데이터를 적용한다. <b>번역 담당자가 시트를 수정하면 코드 배포 없이 바로 반영</b>된다.
+
+`useRuntimeConfig()`로 시트 ID를 가져오고, `public-google-sheets-parser`로 파싱한다. 시트에서 데이터를 정상적으로 읽으면(`rows.length > 1`) 해당 데이터를 사용하고, 그렇지 않으면 미리 생성해둔 JSON 파일을 fallback으로 사용한다.
+
+```js
+import default_ko from './ko/default.json'
+import default_en from './en/default.json'
+import default_ja from './ja/default.json'
+import _ from 'lodash'
+import PublicGoogleSheetsParser from 'public-google-sheets-parser'
+const runtimeConfig = useRuntimeConfig()
+
+export default async (locale) => {
+  const sheetId = runtimeConfig.public.googleSheetId
+  const sheetName = runtimeConfig.public.googleSheetName
+  const parser = new PublicGoogleSheetsParser(sheetId, { sheetName, useFormat: true })
+  let dictionary = {}
+
+  const rows = await parser.parse(sheetId, sheetName)
+  if (rows.length > 1) {
+    rows.forEach((row) => _.set(dictionary, row.key, row[locale]))
+  } else {
+    const defaultDictionary = { ko: default_ko, en: default_en, ja: default_ja }[locale]
+    dictionary = { ...defaultDictionary }
+  }
+
+  return await Promise.resolve(dictionary)
+}
+```
+
+`rows.length > 1` 조건은 헤더 행만 있거나 시트를 읽지 못한 경우를 걸러내기 위한 것이다. 시트 연동에 문제가 생겨도 서비스는 JSON 파일로 정상 동작한다.
+
+---
+
+## 🐛 삽질 기록
+
+### 1. 런타임 locale 로더가 동작하지 않는 문제 — `defineI18nLocale`
+
+방식 2처럼 async 함수로 locale을 동적으로 로드하려면 <b>파일을 단순 `export default`가 아니라 `defineI18nLocale`로 감싸야 한다</b>는 것을 뒤늦게 알았다. 이 래퍼가 없으면 비동기 로더가 제대로 인식되지 않는다.
+
+```ts
+// 올바른 방식
+export default defineI18nLocale(async (locale) => {
+  // 구글 시트 또는 fallback JSON 반환
+  return dictionary
+})
+```
+
+단순히 `.json` 파일 경로를 지정하는 것과, fetch나 import로 로드하는 경우의 처리 방식이 다르다. 공식 문서를 꼼꼼히 안 읽고 넘어갔다가 헤맸다.
+
+### 2. 구글 시트 키값에 숫자 사용 불가
+
+구글 시트에서 키 이름을 숫자로 쓰면 JSON 변환 후 파일을 읽어들일 때 에러가 발생한다.
+
+```json
+// ❌ 에러 발생
+{
+  "1": "첫 번째",
+  "2": "두 번째"
+}
+```
+
+<b>
+  JSON 객체의 키는 문자열이어야 하지만, 키가 숫자로만 이루어진 경우 파싱 과정에서 예상치 못한 에러를
+  유발
+</b>
+할 수 있다. 숫자로 된 키는 반드시 문자열 prefix를 붙이거나, 처음부터 의미 있는 문자열 키로 작성해야
+한다.
+
+### 3. 번역 값에 변수 넣기 — `$t(key, { count: 1 })`
+
+번역 문자열 안에 동적 값을 넣어야 하는 경우가 있었다. 예를 들어 `총 {count}건`처럼.
+
+```json
+{
+  "totalCount": "총 {count}건"
+}
+```
+
+```html
+{{ $t('totalCount', { count: 10 }) }} // → "총 10건"
+```
+
+실제 코드에서는 이런 식으로 활용했다.
+
+```html
+<NuxtLinkLocale :to="item.path"> {{ $t(item.key, { count: 1 }) }} </NuxtLinkLocale>
+```
+
+### 4. 키 중첩 오류 — Nuxt 3 + v9 문법 변경
+
+컴포넌트 interpolation(번역 문자열 안에 HTML 요소 삽입)을 사용할 때 에러가 났다. `@nuxtjs/i18n` v9부터 Nuxt 3와 함께 사용할 경우 문법이 변경됐다.
+
+| 변경 항목 | 이전 (v8 이하) | v9 이상    |
+| --------- | -------------- | ---------- |
+| 태그      | `<i18n>`       | `<i18n-t>` |
+| 속성      | `path`         | `keypath`  |
+
+```html
+<!-- ❌ v8 문법 -->
+<i18n path="message.key">
+  <template #link>
+    <a href="...">클릭</a>
+  </template>
+</i18n>
+
+<!-- ✅ v9 문법 -->
+<i18n-t keypath="message.key">
+  <template #link>
+    <a href="...">클릭</a>
+  </template>
+</i18n-t>
+```
+
+### 5. `useI18n` must be called at the top of setup
+
+`useI18n()`을 setup 함수 중간에서 호출했더니 에러가 발생했다.
+
+```
+Uncaught SyntaxError: Must be called at the top of a setup function
+```
+
+<b>`useI18n()`은 반드시 `setup()` 또는 `<script setup>` 블록 최상단에서 호출</b>해야 한다. 조건문이나 다른 함수 내부에서 호출하면 안 된다.
+
+```ts
+// ❌ 잘못된 예
+const foo = () => {
+  const { t } = useI18n() // 에러!
+}
+
+// ✅ 올바른 예
+const { t } = useI18n() // setup 최상단에서 호출
+const foo = () => {
+  return t('key')
+}
+```
+
+---
+
+## 💡 마치며
+
+`@nuxtjs/i18n` 자체는 설정이 크게 어렵지 않다. 하지만 구글 시트 자동화를 붙이고 나서 삽질이 많았다. 특히 버전 차이로 인한 문법 변경은 공식 문서를 꼼꼼히 읽지 않으면 놓치기 쉽다.
+
+---
+
+## 📚 참고 자료
+
+- [@nuxtjs/i18n 공식 문서](https://i18n.nuxtjs.org/docs/getting-started)
+- [Nuxt i18n 자동화 사례 (fureweb)](https://fureweb-com.github.io/blog/2021/03/16/story-of-development-about-nuxt-i18n-automation-example-project.html)
+- [구글 시트를 이용한 Nuxt i18n 자동화 (stack94)](https://stack94.tistory.com/entry/Nuxt-구글시트google-sheet를-이용한-다국어i18n-자동화-처리)
+- [다국어 자동화로 리소스 최소화하기 (sasha1107)](https://velog.io/@sasha1107/다국어-지원-서비스-자동화로-리소스-최소화하기구글-스프레드-시트-i18next)
+- [defineI18nLocale 공식 문서](https://v8.i18n.nuxtjs.org/api/composables#definei18nlocale)
