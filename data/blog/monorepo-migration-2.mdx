@@ -1,0 +1,231 @@
+---
+title: '모노레포 전환 2편: 공통 패키지 추출, 2주 작업을 하루에 끝내다'
+date: '2025-10-01'
+tags: ['Monorepo', 'pnpm', 'Turborepo', 'Nuxt', '리팩토링']
+draft: false
+summary: '공통 패키지 추출 2주 예상. 실제 소요 시간은 하루였다. AI와 함께 45개 중복 파일을 분석하고 @shared 패키지를 구성한 과정.'
+images: []
+authors: ['default']
+---
+
+[1편](/blog/monorepo-migration-1)에서 현황을 파악하고 계획을 세웠다.
+이번 글에서는 모노레포 구조 설계와 공통 패키지 추출 과정을 다룬다.
+
+> 이 글은 4편 시리즈 중 2편입니다. 기본 구조 생성과 공통 패키지 추출 과정을 다룹니다.
+
+---
+
+## 기본 구조
+
+### apps와 packages 디렉토리
+
+각 앱은 `apps/`에, 공통 컴포넌트, 이미지 등은 `packages/shared/`에 기본 디렉토리로 잡았다.
+
+```
+saas-monorepo/
+├── apps/
+│   ├── consumer/          # 기존 consumer 레포
+│   ├── provider/          # 기존 provider 레포
+│   └── operator/          # 기존 operator 레포
+├── packages/
+│   └── shared/            # 공통 패키지 (새로 생성)
+│       ├── components/
+│       ├── composables/
+│       ├── utils/
+│       ├── assets/
+│       └── styles/
+├── package.json           # 루트 워크스페이스 설정
+├── pnpm-workspace.yaml    # pnpm 워크스페이스 설정
+├── turbo.json             # 빌드 파이프라인 설정
+└── tsconfig.json          # 공통 TypeScript 설정
+```
+
+<small>
+  **📌 참고**: 위 구조는 Nuxt 3 기준 입니다. 4편에서 Nuxt 4로 업그레이드하면서 `/shared` 폴더가
+  apps에 합류되고 각 앱 내부의 `pages/`, `components/` 등이 `app/` 디렉토리 안으로 이동합니다.
+  자세한 내용은 [4편](/blog/monorepo-migration-4)을 참고하세요.
+</small>
+
+### package.json과 워크스페이스 설정
+
+`dev:consumer`, `dev:provider`처럼 앱별로 개발 서버를 실행할 수 있다.
+
+```json
+// package.json (루트)
+{
+  "name": "saas-monorepo",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:consumer": "turbo dev --filter=consumer",
+    "dev:provider": "turbo dev --filter=provider",
+    "dev:operator": "turbo dev --filter=operator",
+    "build": "turbo build"
+  }
+}
+```
+
+`packages/shared`는 각 앱에서 `@project/shared`라는 이름으로 참조할 수 있도록 package.json을 작성했다.
+
+```json
+// packages/shared/package.json
+{
+  "name": "@project/shared",
+  "version": "1.0.0",
+  "exports": {
+    "./components/*": "./components/*",
+    "./composables/*": "./composables/*",
+    "./utils/*": "./utils/*",
+    "./assets/*": "./assets/*"
+  }
+}
+```
+
+---
+
+## 2주가 하루가 된 이유
+
+세 레포에 흩어진 45개 파일을 분석해서 어떤 게 진짜 공통이고 어떤 건 특정 앱 전용인지 분류해서 `packages/shared`로 옮기고, 각 앱의 import 경로를 수정해야 했다.
+내가 하려면 각 레포의 코드, 이미지, 스타일 등을 일일히 확인하면서 2주 정도 걸릴 것을 예상했다.
+그런데 AI를 활용하면서 실제 소요 시간은 하루였다.
+
+작업은 **Claude Desktop**에서 진행했다. 세 레포의 폴더 경로를 명시하고 공통 파일을 분류해달라고 했더니,
+컴포넌트 16개, 레이아웃 2개, composables 5개, utils 1개, SVG assets 7개, 스타일 4개를 추려냈다. **전체 45개 중 39개가 공통으로 분류**됐다.
+
+분류 이후 import 경로 수정도 Claude에게 맡겼다. Consumer 40개 Vue 파일, Provider 15개 이상, Operator 17개 Vue 파일에서 경로를 일괄 변경해야 했다.
+파일 구조와 변경 전/후 경로 규칙을 주니까 알아서 처리했다. 수정이 완료 되면 빌드를 직접 돌려보면서 오류가 나면 해결하고 이어서 수정하는 방식으로 진행했다.
+
+### 공통 컴포넌트 기준
+
+공통으로 추출하면서 기준을 하나 잡았다. 세 앱에서 동일하게 쓰이는 것만 shared로 올리고, 특정 앱에서만 쓰이거나 UI가 다른 것은 그 앱에 그대로 두기로 했다.
+
+SearchInput은 세 앱에 모두 존재 했지만, Consumer에서만 검색 도움말 디자인이 있었다.
+Provider나 Operator에서는 단순 검색 입력만 사용해서, 억지로 공통화하지 않고 Consumer에만 남겨뒀다.
+
+억지로 공통화하면 불필요한 복잡성만 생긴다. **공통화의 목적은 중복 제거지, 모든 코드를 shared에 넣는게 아니다.**
+
+아래는 분류 결과 표다.
+
+| 항목        | 파일 수  | 비고                                                  |
+| ----------- | -------- | ----------------------------------------------------- |
+| 컴포넌트    | 16개     | SearchInput은 Consumer 전용으로 분리                  |
+| 레이아웃    | 2개      | setup.vue, error.vue                                  |
+| composables | 5개      | randomStr, useApiFetch, useToast, useAuth, useSocket  |
+| utils       | 1개      | tableSorting                                          |
+| SVG assets  | 7개      | img_nodata.svg 포함                                   |
+| 스타일      | 4개      | main.scss, tailwind.css, ql-editor.scss, he-tree.scss |
+| **합계**    | **39개** |                                                       |
+
+---
+
+## @shared alias 설정
+
+공통 패키지를 옮겼으면 각 앱에서 편하게 참조할 수 있어야 했다.
+
+각 앱에서 shared 컴포넌트를 호출 할 때,`@project/shared`라는 패키지명으로도 쓸 수 있지만, import할 때마다 풀 경로를 쓰는 건 불편하다. `@shared` alias를 설정해서 짧게 쓸 수 있게 했다.
+
+Nuxt에서 `@`는 각 앱의 루트(`apps/consumer/`)를 가리킨다. `packages/shared`는 앱 루트 바깥에 있어서 `@`로는 접근이 안 되기 때문에 `@shared`를 커스텀 alias로 따로 만든 것이다.
+
+```ts
+// apps/consumer/nuxt.config.ts
+import { fileURLToPath } from 'node:url'
+
+export default defineNuxtConfig({
+  alias: {
+    '@shared': fileURLToPath(new URL('../../packages/shared', import.meta.url)),
+  },
+})
+```
+
+```ts
+// 변경 전 - `@`는 각 앱의 루트(`apps/consumer/`)
+import Button from '@/components/Common/Button.vue'
+import { useToast } from '@/composables/useToast'
+
+// 변경 후 - `@shared`는 (`packages/shared`)
+import Button from '@shared/components/Button.vue'
+import { useToast } from '@shared/composables/useToast'
+```
+
+### Nuxt auto-import 연동
+
+alias만 설정하면 import문을 직접 써야 한다. Nuxt의 auto-import를 활용하면 import문 없이 바로 쓸 수 있다.
+
+컴포넌트는 `Shared` prefix를 붙여서 자동 등록했다.
+
+```ts
+// apps/consumer/nuxt.config.ts
+export default defineNuxtConfig({
+  components: [
+    '~/components',
+    {
+      path: '../shared/components/common',
+      prefix: 'Shared', // SharedButton, SharedModal 등으로 사용
+    },
+  ],
+})
+```
+
+composables와 constants는 `imports.dirs`로 등록하면 된다.
+
+```ts
+export default defineNuxtConfig({
+  imports: {
+    dirs: ['../shared/composables', '../shared/constants'],
+  },
+})
+```
+
+이렇게 하면 `<SharedButton />`을 import 없이 바로 템플릿에서 쓸 수 있고, `useToast()` 같은 composable도 import 없이 호출할 수 있다.
+
+---
+
+## 2편 모노레포 결과
+
+| 항목           | 전         | 후             |
+| -------------- | ---------- | -------------- |
+| 중복 파일 수   | 45개       | 18개 공통 파일 |
+| 코드 중복률    | 90%+       | 0%             |
+| 추출 소요 시간 | 2주 (예상) | 1일 (실제)     |
+
+39개 파일을 `packages/shared`로 옮기고 나면 구조가 이렇게 바뀐다.  
+각 앱에서 공통 파일이 빠지고, `packages/shared`가 단일 소스가 됐다. 앱별로 달랐던 파일은 해당 앱에만 남겨뒀다.
+
+```
+saas-monorepo/
+├── apps/
+│   ├── consumer/
+│   │   ├── components/        # consumer 전용 컴포넌트만 남음
+│   │   │   └── SearchInput.vue
+│   │   ├── pages/
+│   │   ├── nuxt.config.ts
+│   │   └── package.json
+│   ├── provider/
+│   │   ├── pages/
+│   │   ├── nuxt.config.ts
+│   │   └── package.json
+│   └── operator/
+│       ├── pages/
+│       ├── nuxt.config.ts
+│       └── package.json
+├── packages/
+│   └── shared/
+│       ├── components/        # 세 앱 공통 컴포넌트 16개
+│       │   ├── Button.vue
+│       │   ├── Empty.vue
+│       │   └── Modal.vue
+│       ├── composables/       # 공통 composables 5개
+│       │   ├── useToast.ts
+│       │   └── useAuth.ts
+│       ├── utils/             # 공통 유틸 1개
+│       ├── assets/            # 공통 SVG 7개
+│       ├── styles/            # 공통 스타일 4개
+│       └── package.json       # @project/shared
+├── package.json
+├── pnpm-workspace.yaml
+└── turbo.json
+```
+
+공통 패키지를 독립적으로 관리할 수 있는 구조가 갖춰졌다.
+
+[3편](/blog/monorepo-migration-3)에서는 각 앱에 중복으로 존재하던 설정 파일들을 하나로 합치고, 9개였던 CI/CD 워크플로우를 3개로 줄인 과정을 다룬다.

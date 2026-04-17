@@ -1,0 +1,281 @@
+---
+title: '모노레포 전환 4편: Nuxt 4, E2E 테스트를 마무리하며'
+date: '2025-12-23'
+tags: ['Monorepo', 'Nuxt', 'pnpm', 'Playwright', 'E2E', 'CI/CD']
+draft: false
+summary: 'Nuxt 4 업그레이드, pnpm catalog로 버전 중앙화, 43개 E2E 테스트 구축까지. 11주 계획이 3개월이 된 이유와 최종 결과.'
+images: []
+authors: ['default']
+---
+
+[3편](/blog/monorepo-migration-3)에서 설정 통합과 CI/CD 재구성, pnpm 전환을 마쳤다. 인프라가 정리됐으니 이제 버전 업그레이드와 테스트 구축이 남았다.
+
+> 이 글은 4편 시리즈의 마지막 편입니다. Nuxt 4 마이그레이션, pnpm catalog, E2E 테스트, 그리고 최종 결과를 다룹니다.
+
+---
+
+## Nuxt 4 / TailwindCSS v4 마이그레이션
+
+모노레포 전환을 계기로 Nuxt 버전도 올렸다. Nuxt3와 Nuxt4의 폴더 구조가 크게 변동 되는 버전이였고, 운영 중에 마이그레이션 하는 것보다 지금 같이 하는게 위험성이 낮다고 판단했다.
+
+| 패키지      | 전  | 후                               |
+| ----------- | --- | -------------------------------- |
+| Nuxt        | 3.x | 4.2.1                            |
+| Vue         | 3.4 | 3.5.24                           |
+| @nuxt/ui    | 3.x | 4.1.0                            |
+| TailwindCSS | 3.x | 4.1.6 (`@tailwindcss/vite` 통합) |
+
+### Nuxt 4
+
+Nuxt 4의 가장 큰 변화는 폴더 구조다. 기존에는 `pages/`, `components/`, `composables/` 등이 프로젝트 루트에 있었는데, 이제는 `app/` 디렉토리 아래로 들어간다.
+
+```
+Nuxt 3                          Nuxt 4
+apps/consumer/                  apps/consumer/
+├── pages/                      ├── app/
+├── components/                 │   ├── pages/
+├── composables/                │   ├── components/
+├── layouts/                    │   ├── composables/
+└── nuxt.config.ts              │   └── layouts/
+                                └── nuxt.config.ts
+```
+
+[공식 마이그레이션 가이드](https://nuxt.com/docs/4.x/getting-started/upgrade#migrating-to-nuxt-4)에서는 codemod를 제공한다.
+파일 이동, import 경로 수정 같은 반복 작업으로 오래 걸릴 수 있는 작업을 자동으로 처리해준다.
+
+```bash
+npx codemod@0.18.7 nuxt/4/migration-recipe
+```
+
+실행하면 어떤 항목을 마이그레이션할지 선택할 수 있다. 포함된 항목은 이렇다.
+
+| codemod                        | 작업 내용                                                        |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `file-structure`               | `pages/`, `components/` 등을 `app/` 디렉토리로 이동              |
+| `default-data-error-value`     | `useAsyncData` 기본값을 `null` → `undefined`로 변경              |
+| `deprecated-dedupe-value`      | `refresh()`의 `dedupe` 옵션을 boolean → 문자열로 변환            |
+| `absolute-watch-path`          | `builder:watch` 훅의 상대 경로를 절대 경로로 변경                |
+| `shallow-function-reactivity`  | 데이터 객체를 `shallowRef`로 변환, 필요한 경우 `deep: true` 추가 |
+| `template-compilation-changes` | EJS 템플릿 문법을 최신 방식으로 변환                             |
+
+한꺼번에 다 적용하면 충돌 추적이 어려울 것 같아서 Claude에게 어떤 순서로 적용해야 충돌이 적은지 물어보면서 작업했다. 폴더 구조 이동(`file-structure`)을 가장 먼저 하고, 이후 데이터 페칭 관련 변경을 적용하는 식으로 단계마다 빌드를 돌려서 확인했다.
+
+세 앱에서 총 <b>346개 파일</b>을 이동했다. `@nuxt/ui` 4.x의 컴포넌트 API 변경 대응도 함께 진행했다.
+
+### TailwindCSS v4
+
+TailwindCSS v4는 설정 방식이 바뀌었다. 별도의 `tailwind.config.js` 없이 CSS에서 직접 설정한다.
+`@tailwind base` 같은 지시어도 `@import "tailwindcss"` 하나로 대체됐다. [업그레이드 가이드](https://tailwindcss.com/docs/upgrade-guide)에서 전체 변경 목록을 확인할 수 있다.
+
+```css
+/* app/assets/styles/main.css */
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #0064ff;
+  --color-primary-hover: #0050cc;
+}
+```
+
+```ts
+// nuxt.config.ts
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineNuxtConfig({
+  vite: {
+    plugins: [tailwindcss()],
+  },
+})
+```
+
+클래스명도 일부 바뀌었다. `shadow`, `blur`, `rounded` 같은 기본 유틸리티의 스케일이 재조정됐고, 제거된 유틸리티도 있다.
+
+| v3              | v4               |
+| --------------- | ---------------- |
+| `shadow-sm`     | `shadow-xs`      |
+| `shadow`        | `shadow-sm`      |
+| `rounded-sm`    | `rounded-xs`     |
+| `rounded`       | `rounded-sm`     |
+| `blur-sm`       | `blur-xs`        |
+| `ring`          | `ring-3`         |
+| `outline-none`  | `outline-hidden` |
+| `flex-shrink-*` | `shrink-*`       |
+| `flex-grow-*`   | `grow-*`         |
+| `bg-opacity-*`  | `bg-black/50`    |
+
+---
+
+## pnpm catalog로 버전 중앙 관리
+
+각 앱 packages.json에서 라이브러리를 관리하는데 만약 같은 라이브러리는 각 앱에서 다른 버전으로 설치되어 있으면 모노레포 번들에 같은 라이브러리가 두 번 포함된다. 각 앱이 vue 3.4와 3.5를 따로 설치하고 있다면 두 버전이 모두 번들에 들어가는 식이다.
+같은 라이브러리에 대해서 모노레포 번들에서 버전 충돌이 생겨 문제가 생기는 바람에 한 곳에서 관리하는 방법을 찾아야겠다고 생각했다.
+
+pnpm 9부터 [catalog](https://pnpm.io/catalogs) 기능이 추가됐다. 버전을 `pnpm-workspace.yaml` 한 곳에서 정의하고, 각 앱의 `package.json`에서는 `catalog:`로 참조한다.
+즉, 공통된 라이브러리를 `catalog`으로 관리해서 세 앱이 동일한 버전을 쓰도록 강제할 수 있다.
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+catalog:
+  vue: ^3.5.24
+  nuxt: ^4.2.1
+  '@nuxt/ui': ^4.1.0
+  tailwindcss: ^4.1.6
+  '@playwright/test': ^1.48.0
+  'lodash-es': ^4.17.21
+  # ... 57개 패키지
+```
+
+```json
+// apps/consumer/package.json
+{
+  "dependencies": {
+    "vue": "catalog:",
+    "nuxt": "catalog:",
+    "@nuxt/ui": "catalog:",
+    "lodash-es": "catalog:"
+  }
+}
+```
+
+버전을 올릴 때는 `pnpm-workspace.yaml`만 수정하면 세 앱에 동일하게 반영된다. 57개 패키지를 한 파일에서 관리한다.
+
+---
+
+## 번들 최적화
+
+`yarn analyze`로 번들을 뜯어봤더니 예상치 못한 것들이 크게 자리 잡고 있었다.
+
+### lodash → lodash-es
+
+`lodash`가 생각보다 많은 용량을 차지하고 있었다. `debounce`, `cloneDeep` 기능 몇 개 쓰려고 lodash가 가진 모든 패키지를 통째로 들고 있던 거였다.
+
+lodash는 CommonJS 방식이라 tree-shaking이 안 되기 때문이다. `import { debounce } from 'lodash'`라고 써도 번들러는 어떤 함수가 실제로 쓰이는지 정적으로 분석하지 못해서 lodash 전체가 번들에 포함된다.
+
+`lodash-es`는 ES Module로 작성된 버전이다. 실제로 import한 함수만 번들에 들어간다.
+
+```ts
+// 변경 전 — lodash 전체가 번들에 포함됨
+import { debounce, cloneDeep } from 'lodash'
+
+// 변경 후 — 실제 사용한 함수만 포함됨
+import { debounce, cloneDeep } from 'lodash-es'
+```
+
+`import` 경로만 바꾸면 된다. 함수 API는 완전히 동일하다. `packages/shared`를 포함해서 세 앱 전체의 import를 교체했고, 이것만으로 <b>약 3.3MB가 절감</b>됐다.
+
+### @heroicons/vue 제거
+
+analyze를 보다가 `@heroicons/vue`도 눈에 들어왔다. 아이콘을 쓰려고 설치해뒀던 패키지인데, Nuxt UI가 내부적으로 이미 Iconify를 통해 아이콘을 처리하고 있었다. `@heroicons/vue`는 중복으로 들어가 있던 거였다.
+
+```ts
+// 제거 전
+import { SomeIcon } from '@heroicons/vue/24/outline'
+
+// 제거 후 — Nuxt UI의 UIcon으로 대체
+<UIcon name="i-heroicons-some-icon" />
+```
+
+패키지를 완전히 제거하고 나서 번들이 눈에 띄게 줄었다.
+
+| 앱       | 최적화 전 | 최적화 후 | 감소             |
+| -------- | --------- | --------- | ---------------- |
+| Consumer | 28M       | 20M       | -8M (29%)        |
+| Provider | 11M       | 9.4M      | -1.6M (15%)      |
+| Operator | 3.2M      | 2.6M      | -600K (19%)      |
+| **합계** | **42.2M** | **32M**   | **-10.2M (24%)** |
+
+---
+
+## E2E 테스트 구축
+
+각 레포에 Playwright 테스트가 앱별로 약 25개씩 있었다. 모노레포로 합치면서 세 앱의 테스트를 한 곳에서 관리하게 됐고, 중복 로직을 정리할 수 있었다.
+
+가장 먼저 정리한 건 로그인이다. 기존엔 각 앱의 테스트마다 로그인 로직이 따로 있었는데, `tools/playwright-config/global.setup.ts`에 `createAuthSetup()`을 만들고 각 앱의 setup 파일에서 이를 호출하는 방식으로 공통화했다. 테스트 실행 전에 로그인 세션을 한 번만 만들어서 `auth.json`에 저장하고, 이후 테스트들은 이 세션을 재사용한다. 매 테스트마다 로그인을 반복하지 않아도 된다.
+
+```js
+// tools/playwright-config/global.setup.ts
+export function createAuthSetup(baseURL) {
+  return async () => {
+    // TEST_ID, TEST_PW 환경변수로 로그인 후 auth.json 저장
+  }
+}
+
+// apps/consumer/global.setup.ts
+import { createAuthSetup } from '@project/playwright-config'
+export default createAuthSetup(process.env.BASE_URL)
+```
+
+Playwright 설정도 `tools/playwright-config/`에 공통으로 모았다. 각 앱은 공통 설정을 확장해서 앱별 포트와 설정만 추가한다.
+
+```js
+// tools/playwright-config/base.config.js
+export function createPlaywrightConfig({ baseURL, storageState }) {
+  return {
+    testDir: './tests',
+    use: {
+      baseURL,
+      storageState,
+      trace: 'on-first-retry',
+      screenshot: 'only-on-failure',
+      video: 'retain-on-failure',
+    },
+    reporter: [['html'], ['monocart-reporter', { name: 'Coverage Report' }]],
+  }
+}
+
+// apps/consumer/playwright.config.js
+export default defineConfig({
+  ...createPlaywrightConfig({
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    storageState: '.auth/user.json',
+  }),
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+})
+```
+
+| 앱       | 파일 수  | 테스트 케이스 | 주요 영역                                         |
+| -------- | -------- | ------------- | ------------------------------------------------- |
+| Consumer | 18개     | 113개         | 대시보드, 라이선스, 공지, FAQ, 감사로그 등        |
+| Provider | 9개      | 41개          | 대시보드, 관리자 설정, 고객 현황, 계약 관리 등    |
+| Operator | 16개     | 89개          | 계약, 고객, 라이선스, 공지, 접근 권한별 테스트 등 |
+| **합계** | **43개** | **243개**     |                                                   |
+
+CI에서는 paths-filter와 matrix를 조합해서 변경된 앱만 테스트한다. `packages/shared/`가 바뀌면 세 앱 전체를 테스트하고, 개별 앱만 바뀌면 해당 앱만 테스트한다.
+
+---
+
+## 최종 결과
+
+| 항목                 | 전                | 후                              | 효과      |
+| -------------------- | ----------------- | ------------------------------- | --------- |
+| 코드 중복            | 90%+              | 0%                              | 완전 제거 |
+| 설정 코드 (tsconfig) | 141줄             | 3줄                             | 98% 감소  |
+| CI/CD 워크플로우     | 9개               | 3개                             | 67% 감소  |
+| E2E 테스트           | 앱별 ~25개 (분리) | 43개 파일 / 243개 케이스 (통합) | —         |
+| 관리 패키지 버전     | 각 앱 별도        | 57개 중앙 관리                  | —         |
+
+---
+
+## 3개월을 돌아보며
+
+계획은 11주였다. 실제로는 3개월이 걸렸다.
+
+솔직히 컨퍼런스에서 모노레포 얘기를 처음 들었을 때는 회사 프로젝트에 적합 한 방식이라는 생각이 들었지만, '어떻게?'라는 생각에 막막함이 앞서있었다. 개념은 이해했는데 우리 프로젝트에 어디서 부터 적용할지가 안 그려졌다. 세 개 레포를 하나로 합친다는 게 말은 쉬운데, 운영 중인 서비스를 건드리는 거라 잘못되면 어쩌나 싶었다.
+
+그 막막함을 줄여준 게 Claude였다. 패키지 분류, import 경로 수정, 단계별 검증처럼 반복되는 확인 작업을 같이 하면서 피로도가 많이 줄었다. 주 예상이었던 공통 패키지 추출이 하루에 끝난 것도 그 덕분이었다. 마이그레이션처럼 같은 패턴이 반복되는 작업에서 특히 효과적이었다.
+
+일정이 늘어난 건 Nuxt 4 업그레이드 때문이었다. 전환 중반에 추가한 계획이라 346개 파일 이동이 겹쳐서 원인 추적이 복잡해지는 순간이 있었다. 그래도 이 타이밍에 같이 한 건 후회하지 않는다. 모노레포가 최종 배포되고 운영중에 따로 진행했으면 더 번거로웠을 거라는 생각이 든다.
+
+단계별로 나눈 건 맞는 선택이었다. 3편에서의 404 삽질도 한 단계씩 배포하고 검증하는 방식 덕에 빠르게 원인을 찾을 수 있었다. 처음부터 전부 바꿨으면 어디서 터진 건지 한참 헤맸을 거다.
+
+막상 합치고 나서 운영해보니 확실히 달랐다. 공통 컴포넌트 하나 수정하면 세 앱에 바로 반영되고, 버전 관리도 한 곳에서 끝난다. 작업 자체가 훨씬 수월해졌다.
+
+컨퍼런스에서 들은 한 마디가 이렇게 이어질 줄은 몰랐는데, 앞으로도 자주 가야겠다 싶었다.
+
+계획서를 작성하고, 팀장님께 개념을 설명하고, 단계마다 어떤 문제가 생길지 고민하면서 시작 전까지 긴장을 많이 했다. 1년차였던 나에게는 꽤 도전적인 작업이었다. 그걸 믿고 맡겨주신 팀장님께 감사하다.
+
+힘든 과정이었지만 지금 돌아보면 재밌었다. 처음 해본 큰 마이그레이션이었고, 특별한 프로젝트 경험이 생긴 것 같다.

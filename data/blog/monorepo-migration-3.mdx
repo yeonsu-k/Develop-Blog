@@ -1,0 +1,293 @@
+---
+title: '모노레포 전환 3편: 설정 파일 통합하기'
+date: '2025-11-03'
+tags: ['Monorepo', 'pnpm', 'CI/CD', 'GitHub Actions', 'Turborepo']
+draft: false
+summary: '중복 설정 파일 통합, 9개 CI/CD 워크플로우를 3개로, pnpm 전환. 그리고 배포 직후 전체 404를 맞닥뜨린 이야기.'
+images: []
+authors: ['default']
+---
+
+[2편](/blog/monorepo-migration-2)에서 공통 패키지 추출을 마쳤다. 이제 세 앱에 흩어진 공통 설정 파일들, 한 레포에 9개의 CI/CD 워크플로우, npm에서 pnpm으로의 전환이 남아 있었다.
+
+> 이 글은 4편 시리즈 중 3편입니다. 설정 통합, CI/CD 재구성, pnpm 전환, 그리고 시행 착오까지를 다룹니다.
+
+---
+
+## 설정 파일 통합
+
+세 앱은 각자 Nuxt, TypeScript, ESLint, Prettier 설정이 있다. 이제 공통 설정을 한 곳으로 모으고, 각 앱에는 앱별 차이점만 남기는 방식으로 정리했다.
+
+### Nuxt Layer
+
+Nuxt에서 모노레포 구조를 검색해보면서 공식문서에서 소개하는 [Layer](https://nuxt.com/docs/getting-started/layers)에 대해 알게 됐다.
+
+Layer는 설정, 컴포넌트, composable, 미들웨어 등을 공통 레이어로 정의하고 각 앱에서 extends하는 방식으로 공통 코드를 공유할 수 있게 해준다. 공식적으로는 모노레포에서 사용한다는 설명은 없지만, 구조적으로도 딱 맞아 보였다.
+
+modules, css, 플러그인처럼 세 앱이 동일하게 쓰는 Nuxt 설정을 `packages/shared/nuxt.config.ts`로 옮겼다.
+
+```ts
+// packages/shared/nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-auth-sanctum'],
+  css: ['@shared/styles/main.scss'],
+})
+```
+
+각 앱은 `extends`로 Layer를 상속받고, 앱별 설정만 추가한다.
+
+```ts
+// apps/consumer/nuxt.config.ts
+export default defineNuxtConfig({
+  extends: ['../../packages/shared'],
+  // consumer 전용 설정만 여기에
+})
+```
+
+### TypeScript
+
+각 앱의 `tsconfig.json`은 30줄 이상이었고, 내용도 거의 같았다. `@project/tsconfig` 패키지로 공통 설정을 분리했다. base.json과 nuxt.json 두 파일로 나눴는데, base.json에 ESNext, strict 같은 공통 컴파일러 옵션을 두고 nuxt.json이 이를 extends해서 path alias 등 Nuxt 전용 설정만 추가하는 구조다.
+
+```json
+// packages/tsconfig/nuxt.json
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./*"],
+      "@shared/*": ["../shared/*"]
+    }
+  }
+}
+```
+
+각 앱은 이 파일 하나만 extends한다.
+
+```json
+// 변경 전 — apps/consumer/tsconfig.json (약 47줄)
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "strict": true
+    // ... 40줄 더
+  }
+}
+
+// 변경 후 — apps/consumer/tsconfig.json (3줄)
+{
+  "extends": "@project/tsconfig/nuxt.json"
+}
+```
+
+세 앱 합쳐 141줄이 3줄이 됐다. TypeScript 설정을 바꿀 일이 생기면 이제 `packages/tsconfig/` 한 곳만 수정하면 된다.
+
+### ESLint / Prettier
+
+ESLint와 Prettier는 Nuxt Layer를 통하지 않는다. 각 앱의 설정 파일에서 직접 공통 패키지를 참조하는 방식이다.
+
+`@project/eslint-config`에 공통 규칙을 정의하고, 각 앱의 `eslint.config.js`에서 이를 import해서 적용한다.
+
+```js
+// apps/consumer/eslint.config.js — 세 앱 모두 동일한 구조
+import baseConfig from '@project/eslint-config'
+export default [...baseConfig]
+```
+
+Prettier는 `@project/prettier-config` 패키지를 만들고, 각 앱의 `package.json`에서 `prettier` 필드로 참조한다. 기존에 루트와 shared에 따로 있던 `.prettierrc` 파일 2개는 제거했다.
+
+```json
+// apps/consumer/package.json
+{
+  "prettier": "@project/prettier-config"
+}
+```
+
+### 설정 파일 통합으로 줄어든 효과
+
+| 항목                   | 전    | 후  |
+| ---------------------- | ----- | --- |
+| 각 앱 tsconfig 라인 수 | 141줄 | 3줄 |
+| 설정 수정 포인트       | 4곳   | 1곳 |
+| 설정 파일 수           | 7개   | 4개 |
+
+---
+
+## CI/CD 파이프라인 재구성
+
+모노레포 전환 전 GitHub Actions 워크플로우는 총 9개였다. 배포 파일 6개, 앱별 테스트 파일 3개. 시크릿 변수나 앱 이름만 다를 뿐 내용은 거의 같았다. 이걸 3개로 줄였다.
+
+```
+# 변경 전 (9개)
+consumer-aws.yml, consumer-stage.yml, consumer-test.yml
+provider-aws.yml, provider-stage.yml, provider-test.yml
+operator-aws.yml, operator-stage.yml, operator-test.yml
+
+# 변경 후 (3개)
+deploy-aws.yml    # 수동 배포 (workflow_dispatch)
+deploy-stage.yml  # 자동 배포 (paths-filter + Matrix)
+test.yml          # PR 시 npm audit 취약점 검사
+```
+
+배포 워크플로우와 테스트 통합 두 가지로 나눠서 설명해보겠다.
+
+각 앱 `test.yml`은 E2E 테스트와 audit 취약점 검사가 함께 있었는데, audit만 남긴 test.yml 하나로 통합했다.
+모노레포로 합친 후에도 각 앱 디렉토리로 이동해서 로컬에서 E2E를 실행할 수 있어서, 동작 자체는 계속 확인하면서 작업할 수 있었다.
+단지, root 레포에서 각 테스트 파일 실행이나 배포했을 때 수정된 앱만 E2E 테스트를 실행하도록 세팅하는게 복잡해 보였고,
+모노레포 구조를 먼저 안정시키는 게 우선이라 판단해서 `test.yml` 파일에는 audit 검사만 남긴 하나로 통합했다. E2E 재구축은 [4편](/blog/monorepo-migration-4)에서 다룬다.
+
+배포 워크플로우 6개는 `paths-filter + Matrix` 조합으로 2개로 줄일 수 있었다. `dorny/paths-filter` 액션으로 변경된 경로를 감지해서 해당 앱만 배포하는 방식이다. `packages/shared/`에 변경이 생기면 세 앱 모두 배포되고, 개별 앱 디렉토리만 바뀌면 해당 앱만 배포된다.
+
+```yaml
+# .github/workflows/deploy-stage.yml
+jobs:
+  detect-changes:
+    outputs:
+      consumer: ${{ steps.filter.outputs.consumer }}
+      provider: ${{ steps.filter.outputs.provider }}
+      operator: ${{ steps.filter.outputs.operator }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            consumer:
+              - 'apps/consumer/**'
+              - 'packages/shared/**'
+            provider:
+              - 'apps/provider/**'
+              - 'packages/shared/**'
+            operator:
+              - 'apps/operator/**'
+              - 'packages/shared/**'
+
+  deploy:
+    needs: detect-changes
+    strategy:
+      matrix:
+        include:
+          - app: consumer
+            condition: ${{ needs.detect-changes.outputs.consumer == 'true' }}
+          - app: provider
+            condition: ${{ needs.detect-changes.outputs.provider == 'true' }}
+          - app: operator
+            condition: ${{ needs.detect-changes.outputs.operator == 'true' }}
+    if: ${{ matrix.condition }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/setup-dependencies
+      - run: pnpm build --filter=${{ matrix.app }}
+```
+
+공통 의존성 설치 로직은 Composite Action으로 분리했다. Composite Action은 여러 워크플로우에서 공통으로 쓰이는 스텝을 하나의 액션으로 정의해서 재사용할 수 있게 해준다.
+pnpm setup, Node.js setup, 의존성 설치 로직을 `setup-dependencies`라는 Composite Action으로 만들고, 배포 워크플로우에서 호출해서 중복 코드를 제거했다.
+
+이 시점에 Node.js 버전도 정리했다.
+기존에 Consumer는 24, Provider/Operator는 20을 쓰고 있었는데 전부 24로 통일했다. 이제 모든 앱에서 Node.js 버전을 한 곳에서 관리할 수 있다.
+
+```yaml
+# .github/actions/setup-dependencies/action.yml
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 9.15.4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+```
+
+```yaml
+# 배포 워크플로우에서 호출
+steps:
+  - uses: ./.github/actions/setup-dependencies
+  - run: pnpm build --filter=${{ matrix.app }}
+```
+
+Sentry 설정도 이 단계에서 정리했다. 기존에 Consumer에만 Sentry가 활성화돼 있었는데, 모노레포로 합치면서 다른 앱도 통일하는 게 자연스러워 보였다. 다만 Provider, Operator는 아직 Sentry를 쓸 계획이 없었고, 의도치 않은 에러 수집을 막기 위해 일단 전 앱에서 코드는 남기되 비활성화 처리했다.
+
+| 항목               | 전           | 후           |
+| ------------------ | ------------ | ------------ |
+| 워크플로우 파일 수 | 9개          | 3개          |
+| 총 코드 라인       | 340줄        | 194줄        |
+| Setup 로직         | 14줄 × 2파일 | 21줄 × 1파일 |
+
+---
+
+## npm → pnpm 전환
+
+pnpm은 처음부터 염두에 뒀지만 실제 전환은 이 단계까지 미뤘다. 한 번에 너무 많은 걸 바꾸면 문제 원인을 찾기 어렵기 때문이다.
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'apps/*'
+  - 'packages/*'
+```
+
+CI 워크플로우에도 pnpm setup을 추가하고, `npm ci`를 `pnpm install --frozen-lockfile`으로 교체했다.
+
+---
+
+## 설정 통합 배포 직후 전체 404
+
+배포가 완료되자마자 세 앱 모두 404가 떴다.
+
+처음에 의심한 것들이 있었다. pnpm의 심볼릭 링크 방식이 CI 빌드에서 깨졌을 수 있다. GitHub Actions의 `working-directory` 설정이 잘못됐을 수 있다. S3 배포 경로가 틀렸을 수 있다. 셋 다 추적했다. 다 정상이었다.
+
+<b>실제 원인은 GitHub Secrets에 저장된 환경변수였다.</b>
+
+`NUXT_PUBLIC_SANCTUM_BASE_URL`이 잘못된 값으로 설정되어 있었다. CI 설정을 손보면서 Secrets까지 확인하지 않고 넘어갔다. 빌드는 성공했고, 배포도 완료됐다. 다만 런타임에서 API 연결이 되지 않아 앱이 아무것도 그리지 못했다.
+
+배포 후 문제가 생기면 dist, 경로, 빌드 설정보다 <b>환경변수를 먼저 확인</b>해봐야 겠다.
+
+---
+
+## 3편에서 설정 파일 통합 결과
+
+| 항목                 | 전    | 후  |
+| -------------------- | ----- | --- |
+| 설정 코드 (tsconfig) | 141줄 | 3줄 |
+| CI/CD 워크플로우     | 9개   | 3개 |
+| 설정 수정 포인트     | 4곳   | 1곳 |
+
+3편까지 작업을 마친 후 모노레포 구조는 이렇게 됐다.
+
+```
+saas-monorepo/
+├── apps/
+│   ├── consumer/
+│   │   ├── components/        # consumer 전용만 남음
+│   │   ├── pages/
+│   │   ├── nuxt.config.ts     # extends shared layer + 앱 전용 설정만
+│   │   ├── tsconfig.json      # 3줄 (extends @project/tsconfig/nuxt.json)
+│   │   ├── eslint.config.js   # @project/eslint-config import
+│   │   └── package.json       # prettier: "@project/prettier-config"
+│   ├── provider/              # 동일한 구조
+│   └── operator/              # 동일한 구조
+├── packages/
+│   ├── shared/                # 공통 컴포넌트, composables, 스타일
+│   │   └── nuxt.config.ts     # 공통 Nuxt 설정 (Layer)
+│   ├── tsconfig/              # base.json, nuxt.json
+│   ├── eslint-config/         # 공통 ESLint 규칙
+│   └── prettier-config/       # 공통 Prettier 규칙
+├── .github/
+│   ├── actions/
+│   │   └── setup-dependencies/ # Composite Action
+│   └── workflows/
+│       ├── deploy-aws.yml     # 수동 배포
+│       ├── deploy-stage.yml   # 자동 배포 (paths-filter + Matrix)
+│       └── test.yml           # PR 시 audit 검사
+├── pnpm-workspace.yaml
+├── turbo.json
+└── package.json
+```
+
+설정과 파이프라인이 정리됐다. 남은 건 Nuxt 4 업그레이드와 E2E 테스트 구축이다.
+
+[4편](/blog/monorepo-migration-4)에서는 Nuxt 4 마이그레이션, pnpm catalog, E2E 테스트 43개 구축, 그리고 3개월 전환의 최종 결과를 다룬다.
